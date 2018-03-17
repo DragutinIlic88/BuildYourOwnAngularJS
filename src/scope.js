@@ -17,8 +17,15 @@ Scope.prototype.$watch = function(watchFn, listenerFn){
 Scope.prototype.$digest = function(){
     //self has this of scope
     var self = this;
+    var newValue, oldValue;
     _.forEach(this.$$watchers, function(watcher){
-        watcher.watchFn(self);
-        watcher.listenerFn();
+        newValue = watcher.watchFn(self);
+        //first time $digest is called oldValue will be undefined
+        oldValue = watcher.last;
+        if(newValue !== oldValue){
+            //here we add last property to the watcher object and assign it new value
+            watcher.last = newValue;
+            watcher.listenerFn(newValue, oldValue, self);
+        }
     });
 };
