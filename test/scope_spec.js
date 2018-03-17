@@ -29,5 +29,41 @@
             //will return true if spy has been called
             expect(listenerFn).toHaveBeenCalled();
         });
+
+        it("calls the watch function with scope as the argument", function(){
+            //watch is our spy function in this test
+            var watchFn = jasmine.createSpy();
+            var listenerFn = function() {};
+            scope.$watch(watchFn, listenerFn);
+            
+            scope.$digest();
+            //will retrun true if function is called with scope argument
+            expect(watchFn).toHaveBeenCalledWith(scope);
+        });
+
+        it("calls the listener function when the watched value changes", function(){
+            scope.someValue = 'a';
+            scope.counter = 0;
+
+            scope.$watch(
+                function(scope){return scope.someValue;},
+                function(newValue, oldValue, scope) {scope.counter++;}
+            );
+
+            expect(scope.counter).toBe(0);
+            
+            scope.$digest();
+            expect(scope.counter).toBe(1);
+
+            
+            scope.$digest();
+            expect(scope.counter).toBe(1);
+            
+            scope.someValue= 'b';
+            expect(scope.counter).toBe(1);
+
+            scope.$digest();
+            expect(scope.counter).toBe(2);
+        });
     });
   });

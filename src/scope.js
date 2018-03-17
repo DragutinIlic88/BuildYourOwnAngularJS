@@ -1,5 +1,5 @@
 /* jshint globalstrict: true */
-'use strict'
+'use strict';
 
 function Scope(){
     //$$ for private variables in angualar
@@ -15,7 +15,10 @@ Scope.prototype.$watch = function(watchFn, listenerFn){
 };
 
 Scope.prototype.$digest = function(){
+    //self has this of scope
+    var self = this;
     _.forEach(this.$$watchers, function(watcher){
+        watcher.watchFn(self);
         watcher.listenerFn();
-    })
-}
+    });
+};
