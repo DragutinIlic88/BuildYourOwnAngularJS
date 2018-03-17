@@ -1,6 +1,9 @@
 /* jshint globalstrict: true */
 'use strict';
 
+//function will be assigned as initial last value of every watcher
+function initWatchVal(){}
+
 function Scope(){
     //$$ for private variables in angualar
     this.$$watchers = [];
@@ -9,7 +12,8 @@ function Scope(){
 Scope.prototype.$watch = function(watchFn, listenerFn){
     var watcher = {
         watchFn: watchFn,
-        listenerFn: listenerFn
+        listenerFn: listenerFn,
+        last: initWatchVal
     };
     this.$$watchers.push(watcher);
 };
@@ -25,7 +29,9 @@ Scope.prototype.$digest = function(){
         if(newValue !== oldValue){
             //here we add last property to the watcher object and assign it new value
             watcher.last = newValue;
-            watcher.listenerFn(newValue, oldValue, self);
+            watcher.listenerFn(newValue, 
+                oldValue===initWatchVal ? newValue: oldValue, 
+                self);
         }
     });
 };
