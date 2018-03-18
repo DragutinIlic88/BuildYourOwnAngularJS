@@ -18,10 +18,11 @@ Scope.prototype.$watch = function(watchFn, listenerFn){
     this.$$watchers.push(watcher);
 };
 
-Scope.prototype.$digest = function(){
+//digest trough watches once and return dirty if some watch return new value
+Scope.prototype.$$digestOnce = function(){
     //self has this of scope
     var self = this;
-    var newValue, oldValue;
+    var newValue, oldValue, dirty;
     _.forEach(this.$$watchers, function(watcher){
         newValue = watcher.watchFn(self);
         //first time $digest is called oldValue will be undefined
@@ -32,6 +33,16 @@ Scope.prototype.$digest = function(){
             watcher.listenerFn(newValue, 
                 oldValue===initWatchVal ? newValue: oldValue, 
                 self);
+            dirty = true;
         }
     });
+    return dirty;
+};
+
+//call $$digestOnce until dirty is true
+Scope.prototype.$digest = function(){
+    var dirty;
+    do{
+        dirty = this.$$digestOnce();
+    }while(dirty);
 };
