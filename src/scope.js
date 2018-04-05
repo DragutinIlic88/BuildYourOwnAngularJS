@@ -7,6 +7,7 @@ function initWatchVal(){}
 function Scope(){
     //$$ for private variables in angualar
     this.$$watchers = [];
+    this.$$lastDirtyWatch = null; //for short-circuiting optimization
 }
 
 Scope.prototype.$watch = function(watchFn, listenerFn){
@@ -16,6 +17,8 @@ Scope.prototype.$watch = function(watchFn, listenerFn){
         last: initWatchVal
     };
     this.$$watchers.push(watcher);
+    //disabling optimazition in case that listener of some watch add another watch
+    this.$$lastDirtyWatch = null;
 };
 
 //digest trough watches once and return dirty if some watch return new value
@@ -28,12 +31,16 @@ Scope.prototype.$$digestOnce = function(){
         //first time $digest is called oldValue will be undefined
         oldValue = watcher.last;
         if(newValue !== oldValue){
+            //we now know which is last dirty watcher
+            self.$$lastDirtyWatch = watcher;
             //here we add last property to the watcher object and assign it new value
             watcher.last = newValue;
             watcher.listenerFn(newValue, 
                 oldValue===initWatchVal ? newValue: oldValue, 
                 self);
             dirty = true;
+        } else if(self.$$lastDirtyWatch === watcher){
+            return false;
         }
     });
     return dirty;
@@ -41,8 +48,13 @@ Scope.prototype.$$digestOnce = function(){
 
 //call $$digestOnce until dirty is true
 Scope.prototype.$digest = function(){
+    var ttl = 10; //time to live is 10 iteration
     var dirty;
+    this.$$lastDirtyWatch = null;
     do{
         dirty = this.$$digestOnce();
+        if(dirty && !(ttl--)){
+            throw "10 digest iterations reached";
+        }
     }while(dirty);
 };
