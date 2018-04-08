@@ -72,3 +72,9 @@ Scope.prototype.$digest = function() {
     }
   } while (dirty);
 };
+
+//$eval function lets you execute some code in the context of a scope
+//$eval represent building block for $apply
+Scope.prototype.$eval = function(expr, locals){
+  return expr(this, locals);
+};
