@@ -72,10 +72,12 @@ Scope.prototype.$digest = function() {
       asyncTask.scope.$eval(asyncTask.expression);
     }
     dirty = this.$$digestOnce();
-    if (dirty && !(ttl--)) {
+    if ((dirty || this.$$asyncQueue.length) && !(ttl--)) {
       throw "10 digest iterations reached";
     }
-  } while (dirty);
+  } while (dirty || this.$$asyncQueue.length); 
+  //with thid condition we guarantee that $evalAsync will be executed in this digest cycle
+  //even if digest cycle is terminated due to absence of dirty watch
 };
 
 //$eval function lets you execute some code in the context of a scope
