@@ -9,6 +9,7 @@ function Scope() {
   this.$$watchers = [];
   this.$$lastDirtyWatch = null; //for short-circuiting optimization
   this.$$asyncQueue = []; //for storing $evalAsync jobs that have been scheduled
+  this.$$phase = null; //for scheduling $digest if one isn't already ongoing
 }
 
 Scope.prototype.$$areEqual = function(newValue, oldValue, valueEq){
@@ -66,18 +67,22 @@ Scope.prototype.$digest = function() {
   var ttl = 10; //time to live is 10 iteration
   var dirty;
   this.$$lastDirtyWatch = null;
+  this.$beginPhase('$digest');
   do {
+    //execution of deferred tasks
     while(this.$$asyncQueue.length){
       var asyncTask = this.$$asyncQueue.shift();
       asyncTask.scope.$eval(asyncTask.expression);
     }
     dirty = this.$$digestOnce();
     if ((dirty || this.$$asyncQueue.length) && !(ttl--)) {
+      this.$clearPhase();
       throw "10 digest iterations reached";
     }
   } while (dirty || this.$$asyncQueue.length); 
   //with thid condition we guarantee that $evalAsync will be executed in this digest cycle
   //even if digest cycle is terminated due to absence of dirty watch
+  this.$clearPhase(); // ending of digest phase
 };
 
 //$eval function lets you execute some code in the context of a scope
@@ -91,8 +96,10 @@ Scope.prototype.$eval = function(expr, locals){
 //integrating code to the "Angular lifecycle" using $apply
 Scope.prototype.$apply = function(expr) {
   try{
+    this.$beginPhase('$apply');
     return this.$eval(expr);
   }finally {
+    this.$clearPhase(); // ending of apply phase
     this.$digest();
   }
 };
@@ -100,6 +107,30 @@ Scope.prototype.$apply = function(expr) {
 //function whice deffer expr execution but guarantee that it will be executed 
 //before end of digest cycle
 Scope.prototype.$evalAsync = function(expr){
+  var self = this;
+  //if there is not current phase of scope, and no async tasks have been scheduled yet
+  //schedule the digest
+  if(!self.$$phase && !self.$$asyncQueue.length){
+    //digest will happen in near feature, regardless of when or where you invoke it
+    //this way callers of $evalAsync can be ensured the function will return immediately
+    setTimeout(function(){
+      if(self.$$asyncQueue.length){
+        self.$digest();
+      }
+    },0);
+  }
   //we explicitly store current scope because of scope inheritance
   this.$$asyncQueue.push({scope: this, expression: expr});
+};
+
+
+Scope.prototype.$beginPhase = function(phase){
+  if(this.$$phase){
+    throw this.$$phase + ' already in progress.';
+  }
+  this.$$phase = phase;
+};
+
+Scope.prototype.$clearPhase = function(){
+  this.$$phase = null;
 };
