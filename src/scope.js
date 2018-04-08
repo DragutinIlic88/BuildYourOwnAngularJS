@@ -8,6 +8,7 @@ function Scope() {
   //$$ for private variables in angualar
   this.$$watchers = [];
   this.$$lastDirtyWatch = null; //for short-circuiting optimization
+  this.$$asyncQueue = []; //for storing $evalAsync jobs that have been scheduled
 }
 
 Scope.prototype.$$areEqual = function(newValue, oldValue, valueEq){
@@ -66,6 +67,10 @@ Scope.prototype.$digest = function() {
   var dirty;
   this.$$lastDirtyWatch = null;
   do {
+    while(this.$$asyncQueue.length){
+      var asyncTask = this.$$asyncQueue.shift();
+      asyncTask.scope.$eval(asyncTask.expression);
+    }
     dirty = this.$$digestOnce();
     if (dirty && !(ttl--)) {
       throw "10 digest iterations reached";
@@ -77,4 +82,22 @@ Scope.prototype.$digest = function() {
 //$eval represent building block for $apply
 Scope.prototype.$eval = function(expr, locals){
   return expr(this, locals);
+};
+
+//$apply is good way to integrate external libraries to Angular
+//it executes function passed as argument with $eval and then run digest cycle
+//integrating code to the "Angular lifecycle" using $apply
+Scope.prototype.$apply = function(expr) {
+  try{
+    return this.$eval(expr);
+  }finally {
+    this.$digest();
+  }
+};
+
+//function whice deffer expr execution but guarantee that it will be executed 
+//before end of digest cycle
+Scope.prototype.$evalAsync = function(expr){
+  //we explicitly store current scope because of scope inheritance
+  this.$$asyncQueue.push({scope: this, expression: expr});
 };
