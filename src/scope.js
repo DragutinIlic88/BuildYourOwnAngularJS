@@ -11,6 +11,7 @@ function Scope() {
   this.$$asyncQueue = []; //for storing $evalAsync jobs that have been scheduled
   this.$$applyAsyncQueue = []; //for storing $applyAsync tasks that have been scheduled
   this.$$applyAsyncId = null; //for keeping track whether a setTimeout to drain queue has already been scheduled
+  this.$$postDigestQueue = [];
   this.$$phase = null; //for scheduling $digest if one isn't already ongoing
 }
 
@@ -92,6 +93,10 @@ Scope.prototype.$digest = function() {
   //with thid condition we guarantee that $evalAsync will be executed in this digest cycle
   //even if digest cycle is terminated due to absence of dirty watch
   this.$clearPhase(); // ending of digest phase
+
+  while(this.$$postDigestQueue.length){
+    this.$$postDigestQueue.shift()();
+  }
 };
 
 //$eval function lets you execute some code in the context of a scope
@@ -161,9 +166,18 @@ Scope.prototype.$applyAsync = function(expr){
   }
 };
 
+//this code is extracted from $applyAsync function
+//so it can be reusable in $digest function
 Scope.prototype.$$flushApplyAsync = function(){
   while(this.$$applyAsyncQueue.length){
     this.$$applyAsyncQueue.shift()();
   }
   this.$$applyAsyncId = null;
+};
+
+
+//function does not cause a digest to be scheduled
+//execution is delayed until the digest happens for some other reason
+Scope.prototype.$$postDigest = function(fn){
+  this.$$postDigestQueue.push(fn);
 };
