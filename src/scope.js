@@ -9,6 +9,8 @@ function Scope() {
   this.$$watchers = [];
   this.$$lastDirtyWatch = null; //for short-circuiting optimization
   this.$$asyncQueue = []; //for storing $evalAsync jobs that have been scheduled
+  this.$$applyAsyncQueue = []; //for storing $applyAsync tasks that have been scheduled
+  this.$$applyAsyncId = null; //for keeping track whether a setTimeout to drain queue has already been scheduled
   this.$$phase = null; //for scheduling $digest if one isn't already ongoing
 }
 
@@ -68,6 +70,13 @@ Scope.prototype.$digest = function() {
   var dirty;
   this.$$lastDirtyWatch = null;
   this.$beginPhase('$digest');
+
+  //for flushing $applyAsync
+  if(this.$$applyAsyncId){
+    clearTimeout(this.$$applyAsyncId);
+    this.$$flushApplyAsync();
+  }
+
   do {
     //execution of deferred tasks
     while(this.$$asyncQueue.length){
@@ -104,7 +113,7 @@ Scope.prototype.$apply = function(expr) {
   }
 };
 
-//function whice deffer expr execution but guarantee that it will be executed 
+//function which deffer expr execution but guarantee that it will be executed 
 //before end of digest cycle
 Scope.prototype.$evalAsync = function(expr){
   var self = this;
@@ -133,4 +142,28 @@ Scope.prototype.$beginPhase = function(phase){
 
 Scope.prototype.$clearPhase = function(){
   this.$$phase = null;
+};
+
+//if we don't want to evaluate the given function immediately
+//nor does it launch a digest immediately
+//instead it schedules both of these things to happen after short period of time
+//original motivation for handling http responses
+Scope.prototype.$applyAsync = function(expr){
+  var self = this;
+  self.$$applyAsyncQueue.push(function(){
+    self.$eval(expr);
+  });
+  if(self.$$applyAsyncId === null){
+    self.$$applyAsyncId = setTimeout(function(){
+      //we call $apply once outside the loop because we want to digest once
+      self.$apply(_.bind(self.$$flushApplyAsync, self));
+    }, 0);
+  }
+};
+
+Scope.prototype.$$flushApplyAsync = function(){
+  while(this.$$applyAsyncQueue.length){
+    this.$$applyAsyncQueue.shift()();
+  }
+  this.$$applyAsyncId = null;
 };
