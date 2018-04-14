@@ -768,6 +768,24 @@
                 expect(gotNewValues).toEqual([1,2]);
                 expect(gotOldValues).toEqual([1,2]);
             });
+
+            it('only calls listener once per digest', function(){
+                var counter = 0;
+
+                scope.aValue = 1;
+                scope.anotherValue = 2;
+
+                scope.$watchGroup([
+                    function(scope){return scope.aValue;},
+                    function(scope){return scope.anotherValue;}
+                ], function(newValues, oldValues, scope){
+                    counter++;
+                });
+
+                scope.$digest();
+
+                expect(counter).toEqual(1);
+            });
         });
     });
 
