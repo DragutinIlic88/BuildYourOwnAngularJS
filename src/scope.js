@@ -223,21 +223,39 @@ Scope.prototype.$watchGroup = function(watchFns, listenerFn) {
   var self = this;
   var newValues = new Array(watchFns.length);
   var oldValues = new Array(watchFns.length);
-
   var changeReactionScheduled = false;
+  var firstRun = true;
 
+  //if we don't have watchers listener function is called with empty arrays
+  //as arguments
+  if(watchFns.length === 0){
+    self.$evalAsync(function(){
+      listenerFn(newValues,newValues,self);
+    });
+    return;
+  }
+  //internal function witch is passed to $evalAsync
+  //and it call listener with array of new and old values
   function watchGroupListener(){
-    listenerFn(newValues, oldValues, self);
+    //first time copy newValues and oldValues as same reference
+    if(firstRun){
+      firstRun = false;
+      listenerFn(newValues,newValues, self);
+    } else{
+      listenerFn(newValues, oldValues, self);
+    }
     changeReactionScheduled = false;
   }
   _.forEach(watchFns, function(watchFn, i){
+    //create watch for each watcher
     self.$watch(watchFn, function(newValue, oldValue){
       newValues[i] = newValue;
       oldValues[i] = oldValue;
       if(!changeReactionScheduled){
         changeReactionScheduled = true;
+        //call sometime before digest is ended watchGroupListener function
         self.$evalAsync(watchGroupListener);
       }
     });
   });
-}
+};
