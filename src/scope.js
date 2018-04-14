@@ -27,15 +27,30 @@ Scope.prototype.$$areEqual = function(newValue, oldValue, valueEq){
 
 //creates new watcher and push it in $$watchers array
 Scope.prototype.$watch = function(watchFn, listenerFn, valueEq) {
+  var self = this;
   var watcher = {
     watchFn: watchFn,
     listenerFn: listenerFn || function() {},
     valueEq: !!valueEq, //coercing variable to a real booolean by negating it twice
     last: initWatchVal
   };
-  this.$$watchers.push(watcher);
+  //we added new watch to begininig in case when we destroy watch doesn't effect 
+  //digest execution
+  this.$$watchers.unshift(watcher);
   //disabling optimazition in case that listener of some watch add another watch
   this.$$lastDirtyWatch = null;
+
+  //retruning function witch removes added watch
+  //in case we need to destroy watch before ending the scope
+  return function(){
+    var index = self.$$watchers.indexOf(watcher);
+    if(index >= 0){
+      self.$$watchers.splice(index, 1);
+      //we eliminate short-circuiting optimization on watch removal
+      //to allow one watch to destroy another
+      self.$$lastDirtyWatch = null;
+    }
+  };
 };
 
 //digest trough watches once and return dirty if some watch return new value
@@ -43,23 +58,31 @@ Scope.prototype.$$digestOnce = function() {
   //self has this of scope
   var self = this;
   var newValue, oldValue, dirty;
-  _.forEach(this.$$watchers, function(watcher) {
-    newValue = watcher.watchFn(self);
-    //first time $digest is called oldValue will be undefined
-    oldValue = watcher.last;
-    if (!self.$$areEqual(newValue,oldValue,watcher.valueEq)) {
-      //we now know which is last dirty watcher
-      self.$$lastDirtyWatch = watcher;
-      //here we add last property to the watcher object and assign it new value
-      watcher.last = (watcher.valueEq ? _.cloneDeep(newValue) : newValue);
-      watcher.listenerFn(
-        newValue,
-        oldValue === initWatchVal ? newValue : oldValue,
-        self
-      );
-      dirty = true;
-    } else if (self.$$lastDirtyWatch === watcher) {
-      return false;
+  //we iterate from end to begining in case we destroy watch
+  //all watches we already passed through will be moved to left
+  _.forEachRight(this.$$watchers, function(watcher) {
+    try{
+      if(watcher){
+        newValue = watcher.watchFn(self);
+        //first time $digest is called oldValue will be undefined
+        oldValue = watcher.last;
+        if (!self.$$areEqual(newValue,oldValue,watcher.valueEq)) {
+          //we now know which is last dirty watcher
+          self.$$lastDirtyWatch = watcher;
+          //here we add last property to the watcher object and assign it new value
+          watcher.last = (watcher.valueEq ? _.cloneDeep(newValue) : newValue);
+          watcher.listenerFn(
+            newValue,
+            oldValue === initWatchVal ? newValue : oldValue,
+            self
+          );
+          dirty = true;
+        } else if (self.$$lastDirtyWatch === watcher) {
+          return false;
+        }
+      }
+    }catch(e){
+      console.log(e);
     }
   });
   return dirty;
@@ -81,8 +104,12 @@ Scope.prototype.$digest = function() {
   do {
     //execution of deferred tasks
     while(this.$$asyncQueue.length){
-      var asyncTask = this.$$asyncQueue.shift();
-      asyncTask.scope.$eval(asyncTask.expression);
+      try{
+        var asyncTask = this.$$asyncQueue.shift();
+        asyncTask.scope.$eval(asyncTask.expression);
+      }catch(e){
+        console.error(e);
+      }
     }
     dirty = this.$$digestOnce();
     if ((dirty || this.$$asyncQueue.length) && !(ttl--)) {
@@ -95,7 +122,11 @@ Scope.prototype.$digest = function() {
   this.$clearPhase(); // ending of digest phase
 
   while(this.$$postDigestQueue.length){
-    this.$$postDigestQueue.shift()();
+    try{
+      this.$$postDigestQueue.shift()();
+    }catch(e){
+      console.error(e);
+    }
   }
 };
 
@@ -152,7 +183,7 @@ Scope.prototype.$clearPhase = function(){
 //if we don't want to evaluate the given function immediately
 //nor does it launch a digest immediately
 //instead it schedules both of these things to happen after short period of time
-//original motivation for handling http responses
+//original motivation for handleing http responses
 Scope.prototype.$applyAsync = function(expr){
   var self = this;
   self.$$applyAsyncQueue.push(function(){
@@ -170,7 +201,11 @@ Scope.prototype.$applyAsync = function(expr){
 //so it can be reusable in $digest function
 Scope.prototype.$$flushApplyAsync = function(){
   while(this.$$applyAsyncQueue.length){
-    this.$$applyAsyncQueue.shift()();
+    try{
+      this.$$applyAsyncQueue.shift()();
+    }catch(e){
+      console.error(e);
+    }
   }
   this.$$applyAsyncId = null;
 };
