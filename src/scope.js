@@ -216,3 +216,18 @@ Scope.prototype.$$flushApplyAsync = function(){
 Scope.prototype.$$postDigest = function(fn){
   this.$$postDigestQueue.push(fn);
 };
+
+//function watching more then one watchers and if anyone value is changed
+//it calls listener function with array of values
+Scope.prototype.$watchGroup = function(watchFns, listenerFn) {
+  var self = this;
+  var newValues = new Array(watchFns.length);
+  var oldValues = new Array(watchFns.length);
+  _.forEach(watchFns, function(watchFn, i){
+    self.$watch(watchFn, function(newValue, oldValue){
+      newValues[i] = newValue;
+      oldValues[i] = oldValue;
+      listenerFn(newValues, oldValues, self);
+    });
+  });
+}
