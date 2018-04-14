@@ -229,10 +229,15 @@ Scope.prototype.$watchGroup = function(watchFns, listenerFn) {
   //if we don't have watchers listener function is called with empty arrays
   //as arguments
   if(watchFns.length === 0){
+    var shouldCall = true;
     self.$evalAsync(function(){
-      listenerFn(newValues,newValues,self);
+      if(shouldCall){
+        listenerFn(newValues,newValues,self);
+      }
     });
-    return;
+    return function(){
+      shouldCall = false;
+    };
   }
   //internal function witch is passed to $evalAsync
   //and it call listener with array of new and old values
@@ -246,9 +251,11 @@ Scope.prototype.$watchGroup = function(watchFns, listenerFn) {
     }
     changeReactionScheduled = false;
   }
-  _.forEach(watchFns, function(watchFn, i){
+
+  //getting array of destroyFunctions which will be passed in return function
+  var destroyFunctions = _.map(watchFns, function(watchFn, i){
     //create watch for each watcher
-    self.$watch(watchFn, function(newValue, oldValue){
+    return self.$watch(watchFn, function(newValue, oldValue){
       newValues[i] = newValue;
       oldValues[i] = oldValue;
       if(!changeReactionScheduled){
@@ -258,4 +265,11 @@ Scope.prototype.$watchGroup = function(watchFns, listenerFn) {
       }
     });
   });
+
+  //return function calls destroyFunctions from array
+  return function(){
+    _.forEach(destroyFunctions, function(destroyFunction){
+      destroyFunction();
+    });
+  };
 };
