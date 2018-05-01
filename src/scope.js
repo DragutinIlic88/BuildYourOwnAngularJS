@@ -12,6 +12,7 @@ function Scope() {
   this.$$applyAsyncQueue = []; //for storing $applyAsync tasks that have been scheduled
   this.$$applyAsyncId = null; //for keeping track whether a setTimeout to drain queue has already been scheduled
   this.$$postDigestQueue = [];
+  this.$$children = []; //for keeping child scopes
   this.$$phase = null; //for scheduling $digest if one isn't already ongoing
 }
 
@@ -55,35 +56,45 @@ Scope.prototype.$watch = function(watchFn, listenerFn, valueEq) {
 
 //digest trough watches once and return dirty if some watch return new value
 Scope.prototype.$$digestOnce = function() {
+  var dirty;
+  //for tracking short-circuiting optimization
+  var continueLoop = true;
   //self has this of scope
   var self = this;
-  var newValue, oldValue, dirty;
-  //we iterate from end to begining in case we destroy watch
-  //all watches we already passed through will be moved to left
-  _.forEachRight(this.$$watchers, function(watcher) {
-    try{
-      if(watcher){
-        newValue = watcher.watchFn(self);
-        //first time $digest is called oldValue will be undefined
-        oldValue = watcher.last;
-        if (!self.$$areEqual(newValue,oldValue,watcher.valueEq)) {
-          //we now know which is last dirty watcher
-          self.$$lastDirtyWatch = watcher;
-          //here we add last property to the watcher object and assign it new value
-          watcher.last = (watcher.valueEq ? _.cloneDeep(newValue) : newValue);
-          watcher.listenerFn(
-            newValue,
-            oldValue === initWatchVal ? newValue : oldValue,
-            self
-          );
-          dirty = true;
-        } else if (self.$$lastDirtyWatch === watcher) {
-          return false;
+  //for running through the whole hierarchy
+  //and returning boolean indicating wheather any watch anywhere in the 
+  //hierarchy was dirty
+  this.$$everyScope(function(scope){
+    var newValue, oldValue;
+    //we iterate from end to begining in case we destroy watch
+    //all watches we already passed through will be moved to left
+     _.forEachRight(scope.$$watchers, function(watcher) {
+      try{
+        if(watcher){
+          newValue = watcher.watchFn(scope);
+          //first time $digest is called oldValue will be undefined
+          oldValue = watcher.last;
+          if (!scope.$$areEqual(newValue,oldValue,watcher.valueEq)) {
+            //we now know which is last dirty watcher
+            self.$$lastDirtyWatch = watcher;
+            //here we add last property to the watcher object and assign it new value
+            watcher.last = (watcher.valueEq ? _.cloneDeep(newValue) : newValue);
+            watcher.listenerFn(
+              newValue,
+              (oldValue === initWatchVal ? newValue : oldValue),
+              scope
+            );
+            dirty = true;
+          } else if (self.$$lastDirtyWatch === watcher) {
+            continueLoop = false;
+            return false;
+          }
         }
+      }catch(e){
+        console.log(e);
       }
-    }catch(e){
-      console.log(e);
-    }
+    });
+    return continueLoop;
   });
   return dirty;
 };
@@ -282,5 +293,27 @@ Scope.prototype.$new =function(){
   ChildScope.prototype =this;
   //creating new instance from constuctor function and return it
   var child = new ChildScope();
+  //telling parent scope that child is being created
+  this.$$children.push(child);
+  //shadowing parant $$watchers so when $digest function is called
+  //only digest cycle on chiled is executed and not on whole scope 
+  //hierarchy
+  child.$$watchers= [];
+  //shadowing parent $$children so that proper scope has information
+  //just for his own children
+  child.$$children= [];
   return child;
 };
+
+
+//executes an arbitrary function once for each scope in the hierarchy
+//until function returns a falsy value
+Scope.prototype.$$everyScope = function(fn){
+  if(fn(this)){
+    return this.$$children.every(function(child){
+      return child.$$everyScope(fn);
+    });
+  }else{
+    return false;
+  }
+}
