@@ -12,6 +12,7 @@ function Scope() {
   this.$$applyAsyncQueue = []; //for storing $applyAsync tasks that have been scheduled
   this.$$applyAsyncId = null; //for keeping track whether a setTimeout to drain queue has already been scheduled
   this.$$postDigestQueue = [];
+  this.$root = this; //specifies reference to root of scopes
   this.$$children = []; //for keeping child scopes
   this.$$phase = null; //for scheduling $digest if one isn't already ongoing
 }
@@ -39,7 +40,7 @@ Scope.prototype.$watch = function(watchFn, listenerFn, valueEq) {
   //digest execution
   this.$$watchers.unshift(watcher);
   //disabling optimazition in case that listener of some watch add another watch
-  this.$$lastDirtyWatch = null;
+  this.$root.$$lastDirtyWatch = null;
 
   //retruning function witch removes added watch
   //in case we need to destroy watch before ending the scope
@@ -49,7 +50,7 @@ Scope.prototype.$watch = function(watchFn, listenerFn, valueEq) {
       self.$$watchers.splice(index, 1);
       //we eliminate short-circuiting optimization on watch removal
       //to allow one watch to destroy another
-      self.$$lastDirtyWatch = null;
+      self.$root.$$lastDirtyWatch = null;
     }
   };
 };
@@ -76,7 +77,7 @@ Scope.prototype.$$digestOnce = function() {
           oldValue = watcher.last;
           if (!scope.$$areEqual(newValue,oldValue,watcher.valueEq)) {
             //we now know which is last dirty watcher
-            self.$$lastDirtyWatch = watcher;
+            scope.$root.$$lastDirtyWatch = watcher;
             //here we add last property to the watcher object and assign it new value
             watcher.last = (watcher.valueEq ? _.cloneDeep(newValue) : newValue);
             watcher.listenerFn(
@@ -85,7 +86,7 @@ Scope.prototype.$$digestOnce = function() {
               scope
             );
             dirty = true;
-          } else if (self.$$lastDirtyWatch === watcher) {
+          } else if (scope.$root.$$lastDirtyWatch === watcher) {
             continueLoop = false;
             return false;
           }
@@ -103,7 +104,7 @@ Scope.prototype.$$digestOnce = function() {
 Scope.prototype.$digest = function() {
   var ttl = 10; //time to live is 10 iteration
   var dirty;
-  this.$$lastDirtyWatch = null;
+  this.$root.$$lastDirtyWatch = null;
   this.$beginPhase('$digest');
 
   //for flushing $applyAsync
@@ -156,7 +157,9 @@ Scope.prototype.$apply = function(expr) {
     return this.$eval(expr);
   }finally {
     this.$clearPhase(); // ending of apply phase
-    this.$digest();
+    //$root is added so digest cycle can start from top of hierarchy
+    //and so include all parent scopes
+    this.$root.$digest();
   }
 };
 
@@ -171,7 +174,9 @@ Scope.prototype.$evalAsync = function(expr){
     //this way callers of $evalAsync can be ensured the function will return immediately
     setTimeout(function(){
       if(self.$$asyncQueue.length){
-        self.$digest();
+        //$root is added so digest cycle can start from top of hierarchy
+        //and so include all parent scopes
+        self.$root.$digest();
       }
     },0);
   }
@@ -316,4 +321,4 @@ Scope.prototype.$$everyScope = function(fn){
   }else{
     return false;
   }
-}
+};
