@@ -273,3 +273,14 @@ Scope.prototype.$watchGroup = function(watchFns, listenerFn) {
     });
   };
 };
+
+//creates child scope for current scope and returns it
+Scope.prototype.$new =function(){
+  //constuctor function
+  var ChildScope = function() {};
+  //seting scope as prototype of ChildScope
+  ChildScope.prototype =this;
+  //creating new instance from constuctor function and return it
+  var child = new ChildScope();
+  return child;
+};
