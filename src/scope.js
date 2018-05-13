@@ -108,8 +108,8 @@ Scope.prototype.$digest = function() {
   this.$beginPhase('$digest');
 
   //for flushing $applyAsync
-  if(this.$$applyAsyncId){
-    clearTimeout(this.$$applyAsyncId);
+  if(this.$root.$$applyAsyncId){
+    clearTimeout(this.$root.$$applyAsyncId);
     this.$$flushApplyAsync();
   }
 
@@ -205,8 +205,8 @@ Scope.prototype.$applyAsync = function(expr){
   self.$$applyAsyncQueue.push(function(){
     self.$eval(expr);
   });
-  if(self.$$applyAsyncId === null){
-    self.$$applyAsyncId = setTimeout(function(){
+  if(self.$root.$$applyAsyncId === null){
+    self.$root.$$applyAsyncId = setTimeout(function(){
       //we call $apply once outside the loop because we want to digest once
       self.$apply(_.bind(self.$$flushApplyAsync, self));
     }, 0);
@@ -223,7 +223,7 @@ Scope.prototype.$$flushApplyAsync = function(){
       console.error(e);
     }
   }
-  this.$$applyAsyncId = null;
+  this.$root.$$applyAsyncId = null;
 };
 
 
@@ -291,13 +291,26 @@ Scope.prototype.$watchGroup = function(watchFns, listenerFn) {
 };
 
 //creates child scope for current scope and returns it
-Scope.prototype.$new =function(){
-  //constuctor function
-  var ChildScope = function() {};
-  //seting scope as prototype of ChildScope
-  ChildScope.prototype =this;
-  //creating new instance from constuctor function and return it
-  var child = new ChildScope();
+Scope.prototype.$new =function(isolated){
+  var child;
+  //creating isolated scope
+  if(isolated){
+    child = new Scope();
+    //assigning actual root of child in isolated case
+    //otherwise it would be itself
+    child.$root = this.$root;
+    //isolated scopes share the same copy of queues
+    child.$$asyncQueue = this.$$asyncQueue;
+    child.$$postDigestQueue = this.$$postDigestQueue;
+    child.$$applyAsyncQueue =  this.$$applyAsyncQueue;
+  }else{
+    //constuctor function
+    var ChildScope = function() {};
+    //seting scope as prototype of ChildScope
+    ChildScope.prototype =this;
+    //creating new instance from constuctor function and return it
+    child = new ChildScope();
+  }
   //telling parent scope that child is being created
   this.$$children.push(child);
   //shadowing parant $$watchers so when $digest function is called
