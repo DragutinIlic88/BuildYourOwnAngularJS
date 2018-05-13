@@ -291,18 +291,19 @@ Scope.prototype.$watchGroup = function(watchFns, listenerFn) {
 };
 
 //creates child scope for current scope and returns it
-Scope.prototype.$new =function(isolated){
+//parameters: isoleted (optional) - isoleted scopes, parent (optional) - hierarhical parent 
+Scope.prototype.$new =function(isolated,parent = this){
   var child;
   //creating isolated scope
   if(isolated){
     child = new Scope();
     //assigning actual root of child in isolated case
     //otherwise it would be itself
-    child.$root = this.$root;
+    child.$root = parent.$root;
     //isolated scopes share the same copy of queues
-    child.$$asyncQueue = this.$$asyncQueue;
-    child.$$postDigestQueue = this.$$postDigestQueue;
-    child.$$applyAsyncQueue =  this.$$applyAsyncQueue;
+    child.$$asyncQueue = parent.$$asyncQueue;
+    child.$$postDigestQueue = parent.$$postDigestQueue;
+    child.$$applyAsyncQueue =  parent.$$applyAsyncQueue;
   }else{
     //constuctor function
     var ChildScope = function() {};
@@ -312,7 +313,7 @@ Scope.prototype.$new =function(isolated){
     child = new ChildScope();
   }
   //telling parent scope that child is being created
-  this.$$children.push(child);
+  parent.$$children.push(child);
   //shadowing parant $$watchers so when $digest function is called
   //only digest cycle on chiled is executed and not on whole scope 
   //hierarchy
