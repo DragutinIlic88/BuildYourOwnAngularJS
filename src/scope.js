@@ -292,8 +292,9 @@ Scope.prototype.$watchGroup = function(watchFns, listenerFn) {
 
 //creates child scope for current scope and returns it
 //parameters: isoleted (optional) - isoleted scopes, parent (optional) - hierarhical parent 
-Scope.prototype.$new =function(isolated,parent = this){
+Scope.prototype.$new =function(isolated,parent){
   var child;
+  parent = parent || this;
   //creating isolated scope
   if(isolated){
     child = new Scope();
@@ -321,6 +322,8 @@ Scope.prototype.$new =function(isolated,parent = this){
   //shadowing parent $$children so that proper scope has information
   //just for his own children
   child.$$children= [];
+  //reference to parent scope
+  child.$parent = parent;
   return child;
 };
 
@@ -335,4 +338,18 @@ Scope.prototype.$$everyScope = function(fn){
   }else{
     return false;
   }
+};
+
+//function finds current scope from its parent's children array and remove it
+//scope can not be root scope and must have a parent
+//removes watchers of the scope
+Scope.prototype.$destroy = function(){
+  if(this.$parent){
+    var siblings = this.$parent.$$children;
+    var indexOfThis = siblings.indexOf(this);
+    if(indexOfThis >= 0){
+      siblings.splice(indexOfThis,1);
+    }
+  }
+  this.$$watchers = null;
 };
