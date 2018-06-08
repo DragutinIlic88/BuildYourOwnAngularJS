@@ -363,12 +363,16 @@ Scope.prototype.$watchCollection = function(watchFn, listenerFn) {
   var self = this;
   var newValue;
   var oldValue;
+  var oldLength;
   var changeCount = 0;
 
   var internalWatchFn = function(scope) {
+    var newLength;
     newValue = watchFn(scope);
     if (_.isObject(newValue)) {
-      if (_.isArrayLike(newValue)) {
+      //in case collection is array or array like object
+      var length = newValue.length;
+      if (length === 0 || (_.isNumber(length) && length > 0 && (length - 1) in newValue) ) {
         if(!_.isArray(oldValue)){
           changeCount++;
           oldValue = [];
@@ -385,7 +389,41 @@ Scope.prototype.$watchCollection = function(watchFn, listenerFn) {
             oldValue[i] = newItem;
           }
         });
+        //in case collection is non array object
       } else {
+        if(!_.isObject(oldValue) || _.isArray(oldValue)){
+          changeCount++;
+          oldValue = {};
+          oldLength = 0;
+        }
+        newLength = 0;
+        //iterates over an object's memebers, but only the ones
+        //defined for the object itself.Members inherited through
+        //the prototype chain are excluded
+        _.forOwn(newValue, function(newVal,key){
+          newLength++;
+          if(oldValue.hasOwnProperty(key)){
+            var bothNaN = _.isNaN(newVal) && _.isNaN(oldValue[key]); 
+            if(!bothNaN && oldValue[key] !== newVal) {
+              changeCount++;
+              oldValue[key] = newVal;
+            }
+          } else {
+            changeCount++;
+            oldLength++;
+            oldValue[key] = newVal;
+          }
+        });
+
+        if(oldLength > newLength){
+          changeCount++;
+          _.forOwn(oldValue, function(oldVal, key){
+            if(!newValue.hasOwnProperty(key)) {
+              oldLength--;
+              delete oldValue[key];
+            }
+          });
+        }
       }
     }
     //in case if we are not watching collection
