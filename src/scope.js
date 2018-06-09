@@ -364,7 +364,14 @@ Scope.prototype.$watchCollection = function(watchFn, listenerFn) {
   var newValue;
   var oldValue;
   var oldLength;
+  // variable that will be passed to listener function with actual old value
+  var veryOldValue;
+  //variable for optimization purposes, length of Function contains number of 
+  //declared arguments
+  var trackVeryOldValue = (listenerFn.length > 1);
   var changeCount = 0;
+  //if true we need to assign veryOldValue a value so it don't be undifined
+  var firstRun = true;
 
   var internalWatchFn = function(scope) {
     var newLength;
@@ -437,7 +444,15 @@ Scope.prototype.$watchCollection = function(watchFn, listenerFn) {
   };
 
   var internalListenerFn = function() {
-    listenerFn(newValue, oldValue, self);
+    if(firstRun){
+      listenerFn(newValue,newValue,self);
+      firstRun = false;
+    } else {
+      listenerFn(newValue, veryOldValue, self);
+    }
+    if(trackVeryOldValue){
+      veryOldValue = _.clone(newValue);
+    }
   };
 
   return this.$watch(internalWatchFn, internalListenerFn);
