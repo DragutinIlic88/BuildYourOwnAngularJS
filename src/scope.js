@@ -14,6 +14,7 @@ function Scope() {
   this.$$postDigestQueue = [];
   this.$root = this; //specifies reference to root of scopes
   this.$$children = []; //for keeping child scopes
+  this.$$listeners = {}; //for keeping listener function registered with $on function
   this.$$phase = null; //for scheduling $digest if one isn't already ongoing
 }
 
@@ -318,9 +319,12 @@ Scope.prototype.$new = function(isolated, parent) {
   //telling parent scope that child is being created
   parent.$$children.push(child);
   //shadowing parant $$watchers so when $digest function is called
-  //only digest cycle on chiled is executed and not on whole scope
+  //only digest cycle on child is executed and not on whole scope
   //hierarchy
   child.$$watchers = [];
+  //same as with $$watchers we shadowing $$listeners so every scope in hierarchy
+  //have their on $$listeners object
+  child.$$listeners  = {};
   //shadowing parent $$children so that proper scope has information
   //just for his own children
   child.$$children = [];
@@ -456,4 +460,40 @@ Scope.prototype.$watchCollection = function(watchFn, listenerFn) {
   };
 
   return this.$watch(internalWatchFn, internalListenerFn);
+};
+
+//function which register listener for specific event
+//if event doesn't exists in $$listeners object it add it
+Scope.prototype.$on = function(eventName, listener) {
+  var listeners = this.$$listeners[eventName];
+  if(!listeners){
+    //now listeners and $$listeners[eventName] have reference to same array
+    this.$$listeners[eventName] = listeners = [];
+  }
+  listeners.push(listener);
+};
+
+//function pass through all listeners wich are registered with proper event
+// and call them
+Scope.prototype.$emit = function(eventName){
+  //rest function returns all elements of collection except first one
+  var additionalArguments = _.drop(arguments);
+  this.$$fireEventOnScope(eventName,additionalArguments);
+};
+
+//function pass through all listeners wich are registered with proper event
+// and call them
+Scope.prototype.$broadcast = function(eventName) {
+  var additionalArguments = _.drop(arguments);
+  this.$$fireEventOnScope(eventName,additionalArguments);
+};
+
+//function which contains duplicate code from $emit and $broadcast
+Scope.prototype.$$fireEventOnScope = function(eventName,additionalArgs){
+  var event = {name: eventName};
+  var listenerArgs = [event].concat(additionalArgs);
+  var listeners = this.$$listeners[eventName] || [];
+  _.forEach(listeners, function(listener){
+    listener.apply(null, listenerArgs);
+  });
 };
