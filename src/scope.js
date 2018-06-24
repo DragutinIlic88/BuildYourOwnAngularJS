@@ -349,6 +349,7 @@ Scope.prototype.$$everyScope = function(fn) {
 //scope can not be root scope and must have a parent
 //removes watchers of the scope
 Scope.prototype.$destroy = function() {
+  this.$broadcast('$destroy');
   if (this.$parent) {
     var siblings = this.$parent.$$children;
     var indexOfThis = siblings.indexOf(this);
@@ -357,6 +358,7 @@ Scope.prototype.$destroy = function() {
     }
   }
   this.$$watchers = null;
+  this.$$listeners = {};
 };
 
 //function wathces over some collection (array or object), and notified if
@@ -471,29 +473,78 @@ Scope.prototype.$on = function(eventName, listener) {
     this.$$listeners[eventName] = listeners = [];
   }
   listeners.push(listener);
+  return function() {
+    var index = listeners.indexOf(listener);
+    if (index >= 0) {
+      listeners[index] = null;
+    }
+  };
 };
 
 //function pass through all listeners wich are registered with proper event
 // and call them
 Scope.prototype.$emit = function(eventName){
-  //rest function returns all elements of collection except first one
-  var additionalArguments = _.drop(arguments);
-  this.$$fireEventOnScope(eventName,additionalArguments);
+  var propagationStopped = false;
+  var event = {
+      name: eventName,
+      targetScope: this,
+      stopPropagation: function(){
+        propagationStopped = true;
+      },
+      preventDefault : function(){
+        event.defaultPrevented = true;
+      }
+    };
+  //drop function returns all elements of collection except first one
+  var listenerArgs =[event].concat( _.drop(arguments));
+  var scope = this;
+  do{
+    event.currentScope = scope;
+    scope.$$fireEventOnScope(eventName,listenerArgs);
+    scope = scope.$parent;
+  } while (scope && !propagationStopped);
+  event.currentScope = null;
+  return event;
 };
 
 //function pass through all listeners wich are registered with proper event
 // and call them
 Scope.prototype.$broadcast = function(eventName) {
-  var additionalArguments = _.drop(arguments);
-  this.$$fireEventOnScope(eventName,additionalArguments);
+  var event = {
+    name: eventName ,
+    targetScope: this,
+    preventDefault : function(){
+      event.defaultPrevented = true;
+    }
+  };
+  var listenerArgs =[event].concat( _.drop(arguments));
+  //$braodcast function need to visit every child scope in tree
+  //and because we call $$everyScope function for traversal of tree
+  this.$$everyScope(function(scope){
+    event.currentScope = scope;
+    scope.$$fireEventOnScope(eventName,listenerArgs);
+    return true;
+  });
+  event.currentScope = null;
+  return event;
 };
 
 //function which contains duplicate code from $emit and $broadcast
-Scope.prototype.$$fireEventOnScope = function(eventName,additionalArgs){
-  var event = {name: eventName};
-  var listenerArgs = [event].concat(additionalArgs);
+Scope.prototype.$$fireEventOnScope = function(eventName,listenerArgs){
   var listeners = this.$$listeners[eventName] || [];
-  _.forEach(listeners, function(listener){
-    listener.apply(null, listenerArgs);
-  });
+  var i = 0;
+  while(i < listeners.length){
+    if(listeners[i] === null){
+      listeners.splice(i,1);
+    }else{
+      try{
+        listeners[i].apply(null, listenerArgs);
+      } catch(e){
+        console.error(e);
+      }
+      i++;
+    }
+  }
+
+  return event;
 };
